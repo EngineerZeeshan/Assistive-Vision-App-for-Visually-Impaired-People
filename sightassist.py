@@ -2,10 +2,8 @@ import os
 import streamlit as st
 from ultralytics import YOLO
 import cv2
-import random
-import time
 from gtts import gTTS
-from playsound import playsound
+import tempfile
 from datetime import datetime, timedelta
 
 # Load YOLOv8 model
@@ -13,54 +11,16 @@ yolo = YOLO("yolov8n.pt")
 
 # Streamlit app layout
 st.set_page_config(page_title="Assistive Vision App", layout="wide")
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #f7f9fc;
-        font-family: "Arial", sans-serif;
-    }
-    .stButton>button {
-        background-color: #1a73e8;
-        color: white;
-        justify-content: center;
-        align-items: center;
-        border-radius: 10px;
-        padding: 10px;
-        margin: 5px;
-    }
-    .stCheckbox {
-        margin-top: 20px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Display welcome image
-welcome_image_path = "bismillah.png"
-if os.path.exists(welcome_image_path):
-    st.image(welcome_image_path, use_container_width=True, caption="Bismillah hir Rehman Ar Raheem")
-else:
-    st.warning("Welcome image not found! Please add 'bismillah.png' in the script directory.")
 
 st.title("Object Detection & Assistive Vision App for Visually Impaired People")
 st.write("This application provides real-time object recognition and optional audio alerts.")
-
-# Directory to store temp audio files
-audio_temp_dir = "audio_temp_files"
-if not os.path.exists(audio_temp_dir):
-    os.makedirs(audio_temp_dir)
 
 # Placeholder for video frames
 stframe = st.empty()
 
 # User controls
-col1, col2 = st.columns(2)
-with col1:
-    start_detection = st.button("Start Detection")
-with col2:
-    stop_detection = st.button("Stop Detection")
+ip_webcam_url = st.text_input("Enter your IP Webcam URL (e.g., http://<ip-address>:8080/video):")
+start_detection = st.button("Start Detection")
 audio_activation = st.checkbox("Enable Audio Alerts", value=False)
 
 # Categories for audio alerts
@@ -71,55 +31,25 @@ last_alert_time = {}
 alert_cooldown = timedelta(seconds=10)  # 10-second cooldown for alerts
 
 
-def play_audio_alert(label, position):
+def play_audio_alert(label):
     """Generate and play an audio alert."""
-    phrases = [
-        f"Be careful, there's a {label} on your {position}.",
-        f"Watch out! {label} detected on your {position}.",
-        f"Alert! A {label} is on your {position}.",
-    ]
-    alert_text = random.choice(phrases)
-
-    temp_audio_path = os.path.join(audio_temp_dir, f"alert_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.mp3")
+    alert_text = f"Alert! A {label} is detected."
     tts = gTTS(alert_text)
-    tts.save(temp_audio_path)
-
-    try:
-        playsound(temp_audio_path)
-        os.remove(temp_audio_path)  # Clean up after playing
-    except Exception as e:
-        print(f"Audio playback error: {e}")
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+    tts.save(temp_file.name)
+    os.system(f"mpg123 {temp_file.name}")
+    os.remove(temp_file.name)
 
 
-def process_frame(frame, audio_mode):
+def process_frame(frame):
     """Process a single video frame for object detection."""
     results = yolo(frame)
     result = results[0]
 
-    detected_objects = {}
+    detected_objects = []
     for box in result.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
         label = result.names[int(box.cls[0])]
-
-        if audio_mode and label not in alert_categories:
-            continue
-
-        frame_center_x = frame.shape[1] // 2
-        obj_center_x = (x1 + x2) // 2
-        position = "left" if obj_center_x < frame_center_x else "right"
-
-        detected_objects[label] = position
-
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(
-            frame,
-            f"{label}",
-            (x1, y1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 255, 0),
-            2,
-        )
+        detected_objects.append(label)
 
     return detected_objects, frame
 
@@ -128,39 +58,34 @@ def process_frame(frame, audio_mode):
 if start_detection:
     st.success("Object detection started.")
     try:
-        video_capture = cv2.VideoCapture(0)
-        if not video_capture.isOpened():
+        cap = cv2.VideoCapture(ip_webcam_url)
+        if not cap.isOpened():
             st.error("Could not access the webcam. Please check your camera settings.")
         else:
-            while not stop_detection:
-                ret, frame = video_capture.read()
+            while cap.isOpened():
+                ret, frame = cap.read()
                 if not ret:
                     st.error("Failed to capture video. Please check your camera.")
                     break
 
-                detected_objects, processed_frame = process_frame(frame, audio_activation)
+                detected_objects, processed_frame = process_frame(frame)
 
                 frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 stframe.image(frame_rgb, channels="RGB", use_column_width=True)
 
                 if audio_activation:
                     current_time = datetime.now()
-                    for label, position in detected_objects.items():
-                        if (
+                    for label in detected_objects:
+                        if label in alert_categories and (
                             label not in last_alert_time
                             or current_time - last_alert_time[label] > alert_cooldown
                         ):
-                            play_audio_alert(label, position)
+                            play_audio_alert(label)
                             last_alert_time[label] = current_time
-
-                time.sleep(0.1)
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
     finally:
-        if 'video_capture' in locals() and video_capture.isOpened():
-            video_capture.release()
+        if 'cap' in locals() and cap.isOpened():
+            cap.release()
             cv2.destroyAllWindows()
-
-elif stop_detection:
-    st.warning("Object detection stopped.")
