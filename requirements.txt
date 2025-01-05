@@ -1,6 +1,9 @@
-streamlit==1.25.0
-ultralytics==8.0.134
+streamlit
+ultralytics
+gtts
 opencv-python-headless
-gTTS
-pygame
 numpy
+torch
+torchvision
+torchaudio
+simpleaudio
