@@ -3,8 +3,6 @@ ultralytics
 gtts
 opencv-python-headless
 numpy
-groq
 torch
 torchvision
 torchaudio
-pygame
