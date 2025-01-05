@@ -5,9 +5,13 @@ import cv2
 import random
 import time
 from gtts import gTTS
-import simpleaudio as sa
+import pygame
 import threading
 from datetime import datetime, timedelta
+
+# Initialize pygame mixer
+pygame.mixer.quit()  # Ensure the mixer is fully stopped
+pygame.mixer.init()
 
 # Load YOLOv8 model
 yolo = YOLO("yolov8n.pt")
@@ -38,7 +42,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Welcome image
+# Create a container for the buttons
+st.markdown('<div class="button-container">', unsafe_allow_html=True)
+
+# # Render buttons inside the container
+# start_detection = st.button("Start Detection", key="start")
+# stop_detection = st.button("Stop Detection", key="stop")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Display welcome image
 welcome_image_path = "bismillah.png"  # Ensure this image exists in the script's directory
 if os.path.exists(welcome_image_path):
     st.image(welcome_image_path, use_container_width=True, caption="Bismillah hir Rehman Ar Raheem")
@@ -87,11 +100,20 @@ def play_audio_alert(label, position):
     tts.save(temp_file_path)
 
     try:
-        wave_obj = sa.WaveObject.from_wave_file(temp_file_path)
-        play_obj = wave_obj.play()
-        play_obj.wait_done()  # Wait until the sound finishes playing
+        pygame.mixer.music.load(temp_file_path)
+        pygame.mixer.music.play()
 
-        os.remove(temp_file_path)  # Delete the temp audio file after playing
+        def cleanup_audio_file():
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+            pygame.mixer.music.stop()
+            try:
+                os.remove(temp_file_path)
+            except OSError as e:
+                print(f"Error deleting file {temp_file_path}: {e}")
+
+        threading.Thread(target=cleanup_audio_file, daemon=True).start()
+
     except Exception as e:
         print(f"Error playing audio alert: {e}")
 
@@ -166,6 +188,7 @@ if start_detection:
         if 'video_capture' in locals() and video_capture.isOpened():
             video_capture.release()
             cv2.destroyAllWindows()
+            pygame.mixer.quit()
 
 elif stop_detection:
     st.warning("Object detection stopped.")
