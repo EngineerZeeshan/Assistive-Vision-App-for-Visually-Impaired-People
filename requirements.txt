@@ -1,8 +1,8 @@
-streamlit
 ultralytics
 gtts
-opencv-python-headless
+opencv-python-headless==4.7.0.72
 numpy
+streamlit
 torch
 torchvision
 torchaudio
