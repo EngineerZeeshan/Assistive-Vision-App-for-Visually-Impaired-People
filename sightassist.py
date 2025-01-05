@@ -5,13 +5,8 @@ import cv2
 import random
 import time
 from gtts import gTTS
-import pygame
-import threading
+from playsound import playsound
 from datetime import datetime, timedelta
-
-# Initialize pygame mixer
-pygame.mixer.quit()  # Ensure the mixer is fully stopped
-pygame.mixer.init()
 
 # Load YOLOv8 model
 yolo = YOLO("yolov8n.pt")
@@ -42,17 +37,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Create a container for the buttons
-st.markdown('<div class="button-container">', unsafe_allow_html=True)
-
-# # Render buttons inside the container
-# start_detection = st.button("Start Detection", key="start")
-# stop_detection = st.button("Stop Detection", key="stop")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
 # Display welcome image
-welcome_image_path = "bismillah.png"  # Ensure this image exists in the script's directory
+welcome_image_path = "bismillah.png"
 if os.path.exists(welcome_image_path):
     st.image(welcome_image_path, use_container_width=True, caption="Bismillah hir Rehman Ar Raheem")
 else:
@@ -77,7 +63,7 @@ with col2:
     stop_detection = st.button("Stop Detection")
 audio_activation = st.checkbox("Enable Audio Alerts", value=False)
 
-# Categories for audio alerts (hazardous objects or living things)
+# Categories for audio alerts
 alert_categories = {"person", "cat", "dog", "knife", "fire", "gun"}
 
 # Dictionary to store the last alert timestamp for each object
@@ -92,30 +78,17 @@ def play_audio_alert(label, position):
         f"Watch out! {label} detected on your {position}.",
         f"Alert! A {label} is on your {position}.",
     ]
-    caution_note = random.choice(phrases)
+    alert_text = random.choice(phrases)
 
-    temp_file_path = os.path.join(audio_temp_dir, f"temp_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.mp3")
-
-    tts = gTTS(caution_note)
-    tts.save(temp_file_path)
+    temp_audio_path = os.path.join(audio_temp_dir, f"alert_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.mp3")
+    tts = gTTS(alert_text)
+    tts.save(temp_audio_path)
 
     try:
-        pygame.mixer.music.load(temp_file_path)
-        pygame.mixer.music.play()
-
-        def cleanup_audio_file():
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
-            pygame.mixer.music.stop()
-            try:
-                os.remove(temp_file_path)
-            except OSError as e:
-                print(f"Error deleting file {temp_file_path}: {e}")
-
-        threading.Thread(target=cleanup_audio_file, daemon=True).start()
-
+        playsound(temp_audio_path)
+        os.remove(temp_audio_path)  # Clean up after playing
     except Exception as e:
-        print(f"Error playing audio alert: {e}")
+        print(f"Audio playback error: {e}")
 
 
 def process_frame(frame, audio_mode):
@@ -168,7 +141,7 @@ if start_detection:
                 detected_objects, processed_frame = process_frame(frame, audio_activation)
 
                 frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                stframe.image(frame_rgb, channels="RGB", use_container_width=True)
+                stframe.image(frame_rgb, channels="RGB", use_column_width=True)
 
                 if audio_activation:
                     current_time = datetime.now()
@@ -188,7 +161,6 @@ if start_detection:
         if 'video_capture' in locals() and video_capture.isOpened():
             video_capture.release()
             cv2.destroyAllWindows()
-            pygame.mixer.quit()
 
 elif stop_detection:
     st.warning("Object detection stopped.")
